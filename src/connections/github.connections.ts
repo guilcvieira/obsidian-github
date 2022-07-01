@@ -1,4 +1,3 @@
-//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
 import { Notice } from "obsidian"
 import { Octokit } from "@octokit/core"
 import { OctokitOptions } from "@octokit/core/dist-types/types"

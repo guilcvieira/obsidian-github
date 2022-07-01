@@ -224,7 +224,7 @@ export default class GithubIssuesPlugin extends Plugin {
 	async getHttpIssues(issueBody: string): Promise<string> {
 		if (!issueBody) return ''
 
-		return await issueBody.replace(/(\- \[.\] https:\/\/github.com.*issues.)?(\- \[.\] )(https:\/\/github.com.*issues.)(\d+((.|,)\d+)?)/gm, '$2[[$4]]')
+		return await issueBody.replace(/(\- \[.\] https:\/\/github.com.*issues.)?(\- \[.\] )(https:\/\/github.com.*issues.)(\d+((.|,)\d+)?)/gm, '$2#[[$4]]')
 	}
 }
 
