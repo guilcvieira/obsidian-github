@@ -22,7 +22,7 @@ export default class GithubIssuesPlugin extends Plugin {
 		await this.createFolder('issues')
 
 		const ribbonIconEl = this.addRibbonIcon('github', 'Git Issue Merge', (evt: MouseEvent) => {
-			new Notice('This is a notice!')
+			this.mergeIssues()
 		})
 		ribbonIconEl.addClass('git-ribbon-class')
 
@@ -56,12 +56,35 @@ export default class GithubIssuesPlugin extends Plugin {
 		await this.saveData(this.issueSettings)
 	}
 
+	async getAllFiles() {
+		const files = await this.app.vault.getMarkdownFiles()
+		return files
+	}
+
+	async graphicQL() {
+		const issues = await graphicQLTest(this.issueSettings, 1, 100)
+		console.log(issues)
+
+
+
+		// await graphicQLTest(this.issueSettings, 1, 100)
+	}
+
 	async mergeIssues(issues: Array<Issue> = [], page = 1, perPageIssues = 100) {
+		await this.createFolder('issues')
+		await this.getAllFiles().then(async files => { files.length === 0 ? this.issueSettings.lastMerge = '1900-01-01T00:00:00Z' : null })
+
 		await getIssues(this.issueSettings, page, perPageIssues)
 			.then((pageIssues: Array<Issue>) => {
 				pageIssues.map(issue => {
 					issues.push(issue)
 				})
+
+				if (pageIssues.length === 0) {
+					new Notice('No more issues to merge')
+					return
+				}
+
 				if (pageIssues.length === perPageIssues) {
 					return this.mergeIssues(issues, page + 1, perPageIssues)
 				} else {
@@ -69,8 +92,12 @@ export default class GithubIssuesPlugin extends Plugin {
 						.then(validIssues => {
 							validIssues.map(issue => {
 								this.createIssueNote(issue)
-									.then()
 							})
+						})
+						.finally(() => {
+							const lastMerge = new Date().toISOString()
+							this.issueSettings.lastMerge = lastMerge
+							this.saveSettings()
 						})
 				}
 			})
@@ -83,15 +110,23 @@ export default class GithubIssuesPlugin extends Plugin {
 	async createIssueNote(issue: Issue) {
 
 		const path = `issues/${issue.number}.md`
+		const existingIssues = await this.getAllFiles()
 
 		this.makeConnections(issue)
 			.then(connectedIssues => {
 				this.prepareIssue(issue, connectedIssues)
 					.then(async body => {
+
+						const oldIssue = existingIssues.find(existingIssue => existingIssue.path === path)
+
+						if (oldIssue) {
+							await this.app.vault.delete(oldIssue)
+						}
 						try {
 							await this.app.vault.create(path, body)
 						} catch (e) {
-							null
+							console.log(e)
+							new Notice(e.message)
 						}
 					})
 
@@ -108,6 +143,7 @@ export default class GithubIssuesPlugin extends Plugin {
 		let newBody = ''
 
 		newBody = `---\n`
+		
 		// print tags
 		newBody += `tags: [${this.fixLabels(issue.labels)}] \n`
 
@@ -116,6 +152,11 @@ export default class GithubIssuesPlugin extends Plugin {
 
 		// print status
 		newBody += `state: ${issue.state} \n`
+
+		// print dates
+		newBody += `created_at: ${issue.created_at} \n`
+		newBody += `updated_at: ${issue.updated_at} \n`
+
 		newBody += `---\n \n`
 
 		// print issue's url
@@ -133,24 +174,55 @@ export default class GithubIssuesPlugin extends Plugin {
 	/**
 	 * Remove spaces from label names
 	 * @param labels 
+	 * @returns 
 	 */
 	fixLabels(labels: Array<Label>) {
 		return labels.map((label: Label) => label.name.replace(' ', '_')).join(', ')
 	}
 
+	/**
+	 * Look for Updated, Parent, Child and Orphan Issues
+	 * @param issues 
+	 * @returns Array of valid issues
+	 */
 	async getValidIssues(issues: Array<Issue>): Promise<Array<Issue>> {
 
 		const validIssues: Array<Issue> = []
 
-		await this.getParentIssues(issues)
-			.then(async parentIssues => {
-				await parentIssues.map(issue => validIssues.push(issue))
-				this.getChildrenIssues(issues)
-					.then(async childrenIssues => {
-						await childrenIssues.map(issue => validIssues.push(issue))
+		await this.getUpdadtedIssues(issues)
+			.then(async updatedIssues => {
+				await updatedIssues.map(issue => { validIssues.push(issue)})
+
+				await this.getParentIssues(issues)
+					.then(async parentIssues => {
+						await parentIssues.map(issue => validIssues.push(issue))
+						this.getChildrenIssues(issues)
+							.then(async childrenIssues => {
+								await childrenIssues.map(issue => validIssues.push(issue))
+								if (this.issueSettings.onlyLinked === "true") {
+									this.getOrphanIssues(issues, validIssues)
+										.then(async orphanIssues => {
+											await orphanIssues.map(issue => validIssues.push(issue))
+										})
+								}
+							})
 					})
 			})
 		return validIssues
+	}
+
+	async getUpdadtedIssues(issues: Array<Issue>): Promise<Array<Issue>> {
+		const updatedIssues: Array<Issue> = []
+		const existentIssues = await this.getAllFiles()
+
+		issues.map(issue => {
+			const existingIssue = existentIssues.find(existingIssue => existingIssue.path === `issues/${issue.number}.md`)
+			if (existingIssue) {
+				updatedIssues.push(issue)
+			}
+		})
+
+		return updatedIssues
 	}
 
 	async getParentIssues(issues: Array<Issue>): Promise<Array<Issue>> {
@@ -192,6 +264,17 @@ export default class GithubIssuesPlugin extends Plugin {
 		return childrenIssues
 	}
 
+	async getOrphanIssues(issues: Array<Issue>, parentedIssues: Array<Issue>): Promise<Array<Issue>> {
+		const orphanIssues: Array<Issue> = []
+
+		issues.map(issue => {
+			if (!parentedIssues.find(parentedIssue => parentedIssue.number == issue.number))
+				orphanIssues.push(issue)
+		})
+
+		return orphanIssues
+
+	}
 	async makeConnections(issue: Issue): Promise<string> {
 		if (!issue.body) return ''
 
@@ -227,6 +310,7 @@ export default class GithubIssuesPlugin extends Plugin {
 
 		return await issueBody.replace(/(\- \[.\] https:\/\/github.com.*issues.)?(\- \[.\] )(https:\/\/github.com.*issues.)(\d+((.|,)\d+)?)/gm, '$2#[[$4]]')
 	}
+
 }
 
 class SettingTab extends PluginSettingTab {
