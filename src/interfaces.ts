@@ -2,7 +2,9 @@ export interface obsidianGitHubPluginSettings {
     auth: string
     owner: string
     repo: string
+    project: string
     onlyLinked: string
+    lastMerge: string
 }
 
 export interface Issue {
@@ -11,7 +13,6 @@ export interface Issue {
     user: User
     number: number
     labels: Array<Label>
-    sprint: string
     state: string
     updated_at: string
     created_at: string
@@ -25,4 +26,19 @@ export interface User {
 
 export interface Label {
     name: string
+}
+
+export interface ProjectsResponse {
+    data: {
+        organization: {
+            projectV2: {
+                items: {
+                    pageInfo: {
+                        hasNextPage: boolean
+                    }
+                    nodes: Array<Issue>
+                }
+            }
+        }
+    }
 }

@@ -1,15 +1,16 @@
 /* eslint-disable no-useless-escape */
 import { App, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian'
 import { Issue, Label, obsidianGitHubPluginSettings } from './interfaces'
-import { getIssues } from 'src/connections/github.connections'
+import { getIssues, graphicQLTest } from 'src/connections/github.connections'
 
 
 const DEFAULT_ISSUE_SETTINGS: obsidianGitHubPluginSettings = {
 	auth: '',
 	owner: '',
 	repo: '',
+	project: '',
 	onlyLinked: 'false',
-
+	lastMerge: '1900-01-01T00:00:00Z'
 }
 
 export default class GithubIssuesPlugin extends Plugin {
@@ -242,6 +243,12 @@ class SettingTab extends PluginSettingTab {
 		containerEl.empty()
 
 		containerEl.createEl('h2', { text: 'Github Merge Issue Settings.' })
+		containerEl.createEl('h2', {
+			text: `Last merge at: ${new Date(this.plugin.issueSettings.lastMerge).toLocaleDateString(navigator.language, {
+				hour: '2-digit',
+				minute: '2-digit'
+			})}`
+		})
 
 		new Setting(containerEl)
 			.setName('Token')
@@ -282,6 +289,19 @@ class SettingTab extends PluginSettingTab {
 			)
 
 		new Setting(containerEl)
+			.setName('Project Number')
+			.setDesc('The project to use for the GitHub API.')
+			.addText(text =>
+				text
+					.setPlaceholder('Enter your repository')
+					.setValue(this.plugin.issueSettings.project)
+					.onChange(async value => {
+						this.plugin.issueSettings.project = value
+						await this.plugin.saveSettings()
+					})
+			)
+
+		new Setting(containerEl)
 			.setName('linked')
 			.setDesc('Get non linked issues')
 			.addDropdown(dropdown => {
@@ -301,6 +321,14 @@ class SettingTab extends PluginSettingTab {
 					this.plugin.mergeIssues()
 				})
 				.setButtonText('Merge')
+			)
+
+		new Setting(containerEl)
+			.addButton(button => button
+				.onClick(async () => {
+					this.plugin.graphicQL()
+				})
+				.setButtonText('test')
 			)
 	}
 }
