@@ -1,0 +1,13 @@
+.graph-controls {
+	max-width: unset;
+}
+
+.setting-item-control {
+	width: 100%;
+}
+
+.setting-item.mod-search-setting .setting-item-control .search-input-container {
+    position: relative;
+    margin: 0;
+    width: 100%;
+}
