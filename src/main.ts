@@ -1,16 +1,16 @@
 /* eslint-disable no-useless-escape */
 import { App, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian'
 import { Issue, Label, obsidianGitHubPluginSettings } from './interfaces'
-import { getIssues, graphicQLTest } from 'src/connections/github.connections'
+import { getIssues } from 'src/connections/github.connections'
 
 
 const DEFAULT_ISSUE_SETTINGS: obsidianGitHubPluginSettings = {
 	auth: '',
 	owner: '',
 	repo: '',
-	project: '',
 	onlyLinked: 'false',
-	lastMerge: '1900-01-01T00:00:00Z'
+	lastMerge: '1900-01-01T00:00:00Z',
+	childrenIssuesNumber: [],
 }
 
 export default class GithubIssuesPlugin extends Plugin {
@@ -57,19 +57,10 @@ export default class GithubIssuesPlugin extends Plugin {
 	}
 
 	async getAllFiles() {
-		const files = await this.app.vault.getMarkdownFiles()
+		const files = await this.app.vault.getFiles()
 		return files
 	}
-
-	async graphicQL() {
-		const issues = await graphicQLTest(this.issueSettings, 1, 100)
-		console.log(issues)
-
-
-
-		// await graphicQLTest(this.issueSettings, 1, 100)
-	}
-
+	
 	async mergeIssues(issues: Array<Issue> = [], page = 1, perPageIssues = 100) {
 		await this.createFolder('issues')
 		await this.getAllFiles().then(async files => { files.length === 0 ? this.issueSettings.lastMerge = '1900-01-01T00:00:00Z' : null })
@@ -143,7 +134,7 @@ export default class GithubIssuesPlugin extends Plugin {
 		let newBody = ''
 
 		newBody = `---\n`
-		
+
 		// print tags
 		newBody += `tags: [${this.fixLabels(issue.labels)}] \n`
 
@@ -373,19 +364,6 @@ class SettingTab extends PluginSettingTab {
 			)
 
 		new Setting(containerEl)
-			.setName('Project Number')
-			.setDesc('The project to use for the GitHub API.')
-			.addText(text =>
-				text
-					.setPlaceholder('Enter your repository')
-					.setValue(this.plugin.issueSettings.project)
-					.onChange(async value => {
-						this.plugin.issueSettings.project = value
-						await this.plugin.saveSettings()
-					})
-			)
-
-		new Setting(containerEl)
 			.setName('linked')
 			.setDesc('Get non linked issues')
 			.addDropdown(dropdown => {
@@ -407,12 +385,5 @@ class SettingTab extends PluginSettingTab {
 				.setButtonText('Merge')
 			)
 
-		new Setting(containerEl)
-			.addButton(button => button
-				.onClick(async () => {
-					this.plugin.graphicQL()
-				})
-				.setButtonText('test')
-			)
 	}
 }

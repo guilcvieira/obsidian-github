@@ -2,9 +2,9 @@ export interface obsidianGitHubPluginSettings {
     auth: string
     owner: string
     repo: string
-    project: string
     onlyLinked: string
     lastMerge: string
+    childrenIssuesNumber: Array<number>
 }
 
 export interface Issue {
@@ -26,19 +26,4 @@ export interface User {
 
 export interface Label {
     name: string
-}
-
-export interface ProjectsResponse {
-    data: {
-        organization: {
-            projectV2: {
-                items: {
-                    pageInfo: {
-                        hasNextPage: boolean
-                    }
-                    nodes: Array<Issue>
-                }
-            }
-        }
-    }
 }
