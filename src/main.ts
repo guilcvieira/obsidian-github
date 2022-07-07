@@ -35,9 +35,9 @@ export default class GithubIssuesPlugin extends Plugin {
 
 	}
 
-	intervalFunctions() {
-		this.createFolder('issues')
-		// TODO: INTERVAL MERGE RULES
+	async intervalFunctions() {
+		await this.createFolder('issues')
+		await this.mergeIssues()
 	}
 
 	async createFolder(folderName: string) {
@@ -111,8 +111,14 @@ export default class GithubIssuesPlugin extends Plugin {
 						const oldIssue = existingIssues.find(existingIssue => existingIssue.path === path)
 
 						if (oldIssue) {
-							await this.app.vault.delete(oldIssue)
+							try {
+								await this.app.vault.delete(oldIssue)
+							} catch (e) {
+								console.log(e)
+								new Notice(e.message)
+							}
 						}
+
 						try {
 							await this.app.vault.create(path, body)
 						} catch (e) {
@@ -182,12 +188,11 @@ export default class GithubIssuesPlugin extends Plugin {
 
 		await this.getUpdadtedIssues(issues)
 			.then(async updatedIssues => {
-				await updatedIssues.map(issue => { validIssues.push(issue)})
-
+				await updatedIssues.map(issue => { validIssues.push(issue) })
 				await this.getParentIssues(issues)
 					.then(async parentIssues => {
 						await parentIssues.map(issue => validIssues.push(issue))
-						this.getChildrenIssues(issues)
+						await this.getChildrenIssues(issues)
 							.then(async childrenIssues => {
 								await childrenIssues.map(issue => validIssues.push(issue))
 								if (this.issueSettings.onlyLinked === "true") {
@@ -199,7 +204,12 @@ export default class GithubIssuesPlugin extends Plugin {
 							})
 					})
 			})
-		return validIssues
+
+		const uniqueIssues = validIssues.filter((issue, index) => {
+			return validIssues.indexOf(issue) === index
+		})
+
+		return uniqueIssues
 	}
 
 	async getUpdadtedIssues(issues: Array<Issue>): Promise<Array<Issue>> {
@@ -233,8 +243,8 @@ export default class GithubIssuesPlugin extends Plugin {
 
 	async getChildrenIssues(issues: Array<Issue>): Promise<Array<Issue>> {
 
-		const childrenIssuesNumber: Array<number> = []
 		const childrenIssues: Array<Issue> = []
+		const childrenIssuesNumber = this.issueSettings.childrenIssuesNumber
 
 		const hashRegex = /(\- \[.\] #)(\d+((.|,)\d+)?)/gm
 		const httpRegexFind = /(\- \[.\] https:\/\/github.com.*issues.)/gm
@@ -242,8 +252,19 @@ export default class GithubIssuesPlugin extends Plugin {
 
 		await issues.map(issue => {
 			if (issue.body) {
-				if (issue.body.match(hashRegex)) issue.body.match(hashRegex).map(hashIssue => { childrenIssuesNumber.push(Number(hashIssue.replace(hashRegex, '$2'))) })
-				if (issue.body.match(httpRegexFind)) issue.body.match(httpRegexReplace).map(httpIssue => { childrenIssuesNumber.push(Number(httpIssue.replace(httpRegexReplace, '$4'))) })
+				if (!this.issueSettings.childrenIssuesNumber.some(childrenIssue => childrenIssue === issue.number)) {
+					if (issue.body.match(hashRegex))
+						issue.body.match(hashRegex).map(hashIssue => {
+							childrenIssuesNumber.push(Number(hashIssue.replace(hashRegex, '$2')))
+							this.issueSettings.childrenIssuesNumber.push(Number(hashIssue.replace(hashRegex, '$2')))
+						})
+
+					if (issue.body.match(httpRegexFind))
+						issue.body.match(httpRegexReplace).map(httpIssue => {
+							childrenIssuesNumber.push(Number(httpIssue.replace(httpRegexReplace, '$4')))
+							this.issueSettings.childrenIssuesNumber.push(Number(httpIssue.replace(httpRegexReplace, '$4')))
+						})
+				}
 			}
 		})
 
@@ -251,6 +272,10 @@ export default class GithubIssuesPlugin extends Plugin {
 			if (issues.find(issue => issue.number == number))
 				childrenIssues.push(issues.find(issue => issue.number == number))
 		})
+
+		this.issueSettings.childrenIssuesNumber = [... new Set(this.issueSettings.childrenIssuesNumber)]
+
+		await this.saveSettings()
 
 		return childrenIssues
 	}
